@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 const SCHEME: &'static str = "magnet:?";
 
-pub(crate) mod field_name {
+pub(self) mod field_name {
     pub const NAME: &'static str = "dn";
     pub const LENGTH: &'static str = "xl";
     pub const TOPIC: &'static str = "xt";
