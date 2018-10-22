@@ -8,13 +8,14 @@ const SCHEME: &'static str = "magnet:?";
 
 pub(crate) mod field_name {
     pub const NAME: &'static str = "dn";
-    pub const EXACT_LENGTH: &'static str = "xl";
-    pub const EXACT_TOPIC: &'static str = "xt";
+    pub const LENGTH: &'static str = "xl";
+    pub const TOPIC: &'static str = "xt";
     pub const ACCEPTABLE_SOURCE: &'static str = "as";
     pub const EXACT_SOURCE: &'static str = "xs";
-    pub const KEYWORDS: &'static str = "kt";
-    pub const MANIFEST_TOPIC: &'static str = "mt";
+    pub const KEYWORD: &'static str = "kt";
+    pub const MANIFEST: &'static str = "mt";
     pub const ADDRESS_TRACKER: &'static str = "tr";
+    pub const EXTENSION_PREFIX: &'static str = "x.";
 }
 
 #[derive(Debug)]
@@ -37,13 +38,43 @@ pub struct MagnetURI {
 }
 
 impl MagnetURI {
+    pub fn has_extensions(&self) -> bool {
+        self.fields.iter().any(Field::is_extension)
+    }
+
+    pub fn has_unknown_fields(&self) -> bool {
+        self.fields.iter().any(Field::is_unknown)
+    }
+
+    pub fn is_strictly_valid(&self) -> bool {
+        // TODO: no unknown fields, one length, no duplicate non matching hashes
+        true
+    }
+
     pub fn names(&self) -> Vec<&str> {
         self.get_field_value(Field::name)
     }
 
+    pub fn name(&self) -> Option<&str> {
+        None // FIXME
+    }
+
+    pub fn dn(&self) -> Option<&str> {
+        self.name()
+    }
+
+    pub fn info_hashes(&self) -> Vec<&BTInfoHash> {
+        Vec::new() // FIXME
+    }
+
+    pub fn info_hash(&self) -> Option<&BTInfoHash> {
+        None // FIXME
+    }
+
     fn get_field_value<'a, F, T>(&'a self, f: F) -> Vec<T>
-    where F: Fn(&'a Field) -> Option<T>
-     {
+    where
+        F: Fn(&'a Field) -> Option<T>,
+    {
         self.fields
             .iter()
             .map(f)
@@ -83,13 +114,15 @@ impl fmt::Display for MagnetURI {
 #[derive(Debug, PartialEq)]
 pub enum Field {
     Name(String),
-    ExactLength(usize),
-    ExactTopic(ExactTopic),
+    Length(usize),
+    Topic(Topic),
     AcceptableSource(String),
     ExactSource(String),
-    Keywords(String),
-    ManifestTopic(String),
+    Keyword(String),
+    Manifest(String),
     AddressTracker(String),
+    Extension(String, String),
+    Unknown(String, String),
 }
 
 impl Field {
@@ -97,35 +130,45 @@ impl Field {
         use field_name::*;
         use Field::*;
 
-        if key.starts_with(NAME) {
-            Ok(Name(val.to_owned()))
-        } else if key.starts_with(EXACT_LENGTH) {
-            match usize::from_str(val) {
+        match key {
+            NAME => Ok(Name(val.to_owned())),
+            LENGTH => match usize::from_str(val) {
                 Err(_) => Err(Error::with_field(key, val)),
-                Ok(l) => Ok(ExactLength(l)),
-            }
-        } else if key.starts_with(EXACT_TOPIC) {
-            Ok(ExactTopic(self::ExactTopic::from_str(val)?))
-        } else if key.starts_with(ACCEPTABLE_SOURCE) {
-            Ok(AcceptableSource(val.to_owned()))
-        } else if key.starts_with(EXACT_SOURCE) {
-            Ok(ExactSource(val.to_owned()))
-        } else if key.starts_with(KEYWORDS) {
-            Ok(Keywords(val.to_owned()))
-        } else if key.starts_with(MANIFEST_TOPIC) {
-            Ok(ManifestTopic(val.to_owned()))
-        } else if key.starts_with(ADDRESS_TRACKER) {
-            Ok(AddressTracker(val.to_owned()))
-        } else {
-            Err(Error::with_field(key, val))
+                Ok(l) => Ok(Length(l)),
+            },
+            TOPIC => Ok(Topic(self::Topic::from_str(val)?)),
+            ACCEPTABLE_SOURCE => Ok(AcceptableSource(val.to_owned())),
+            EXACT_SOURCE => Ok(ExactSource(val.to_owned())),
+            KEYWORD => Ok(Keyword(val.to_owned())),
+            MANIFEST => Ok(Manifest(val.to_owned())),
+            ADDRESS_TRACKER => Ok(AddressTracker(val.to_owned())),
+            _ => if key.starts_with(EXTENSION_PREFIX) {
+                let (_, ext_name) = key.split_at(EXTENSION_PREFIX.len());
+                Ok(Extension(ext_name.to_owned(), val.to_owned()))
+            } else {
+                Ok(Unknown(key.to_owned(), val.to_owned()))
+            },
+        }
+    }
+
+    fn is_extension(&self) -> bool {
+        match self {
+            Field::Extension(_, _) => true,
+            _ => false,
+        }
+    }
+
+    fn is_unknown(&self) -> bool {
+        match self {
+            Field::Unknown(_, _) => true,
+            _ => false,
         }
     }
 
     fn name(&self) -> Option<&str> {
-        if let Field::Name(ref name) = self {
-            Some(name)
-        } else {
-            None
+        match self {
+            Field::Name(ref name) => Some(name),
+            _ => None,
         }
     }
 }
@@ -138,17 +181,19 @@ impl fmt::Display for Field {
 
 type TTHHash = String;
 type SHA1Hash = String;
+type BTInfoHash = String;
 
 #[derive(Debug, PartialEq)]
-pub enum ExactTopic {
+pub enum Topic {
     TigerTreeHash(TTHHash),
     SHA1(SHA1Hash),
     BitPrint(SHA1Hash, TTHHash),
     ED2K(String),
     MD5(String),
+    BitTorrentInfoHash(BTInfoHash),
 }
 
-impl FromStr for ExactTopic {
+impl FromStr for Topic {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -156,20 +201,49 @@ impl FromStr for ExactTopic {
     }
 }
 
-impl fmt::Display for ExactTopic {
+impl fmt::Display for Topic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "")
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Builder {
+    fields: Vec<Field>,
+}
+
+impl Builder {
+    pub fn with_field(mut self, f: Field) -> Self {
+        self.fields.push(f);
+        self
+    }
+
+    pub fn with_name(self, name: &str) -> Self {
+        self.with_field(Field::Name(name.to_owned()))
+    }
+
+    pub fn with_topic(self, xt: Topic) -> Self {
+        self.with_field(Field::Topic(xt))
+    }
+
+    pub fn with_extension(self, ext_name: &str, val: &str) -> Self {
+        self.with_field(Field::Extension(ext_name.to_owned(), val.to_owned()))
+    }
+
+    pub fn with_info_hash(self, bith: BTInfoHash) -> Self {
+        self.with_topic(Topic::BitTorrentInfoHash(bith))
+    }
+
+    pub fn build(self) -> MagnetURI {
+        MagnetURI {
+            fields: self.fields,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
 
     #[test]
     fn smoke() {
