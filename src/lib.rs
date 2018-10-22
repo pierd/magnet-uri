@@ -7,12 +7,12 @@ use std::str::FromStr;
 const SCHEME: &'static str = "magnet:?";
 
 pub(crate) mod field_name {
-    pub const DISPLAY_NAME: &'static str = "dn";
+    pub const NAME: &'static str = "dn";
     pub const EXACT_LENGTH: &'static str = "xl";
     pub const EXACT_TOPIC: &'static str = "xt";
     pub const ACCEPTABLE_SOURCE: &'static str = "as";
     pub const EXACT_SOURCE: &'static str = "xs";
-    pub const KEYWORD_TOPIC: &'static str = "kt";
+    pub const KEYWORDS: &'static str = "kt";
     pub const MANIFEST_TOPIC: &'static str = "mt";
     pub const ADDRESS_TRACKER: &'static str = "tr";
 }
@@ -37,8 +37,8 @@ pub struct MagnetURI {
 }
 
 impl MagnetURI {
-    pub fn display_names(&self) -> Vec<&str> {
-        self.get_field_value(Field::display_name)
+    pub fn names(&self) -> Vec<&str> {
+        self.get_field_value(Field::name)
     }
 
     fn get_field_value<'a, F, T>(&'a self, f: F) -> Vec<T>
@@ -82,12 +82,12 @@ impl fmt::Display for MagnetURI {
 
 #[derive(Debug, PartialEq)]
 pub enum Field {
-    DisplayName(String),
+    Name(String),
     ExactLength(usize),
     ExactTopic(ExactTopic),
     AcceptableSource(String),
     ExactSource(String),
-    KeywordTopic(String),
+    Keywords(String),
     ManifestTopic(String),
     AddressTracker(String),
 }
@@ -97,8 +97,8 @@ impl Field {
         use field_name::*;
         use Field::*;
 
-        if key.starts_with(DISPLAY_NAME) {
-            Ok(DisplayName(val.to_owned()))
+        if key.starts_with(NAME) {
+            Ok(Name(val.to_owned()))
         } else if key.starts_with(EXACT_LENGTH) {
             match usize::from_str(val) {
                 Err(_) => Err(Error::with_field(key, val)),
@@ -110,8 +110,8 @@ impl Field {
             Ok(AcceptableSource(val.to_owned()))
         } else if key.starts_with(EXACT_SOURCE) {
             Ok(ExactSource(val.to_owned()))
-        } else if key.starts_with(KEYWORD_TOPIC) {
-            Ok(KeywordTopic(val.to_owned()))
+        } else if key.starts_with(KEYWORDS) {
+            Ok(Keywords(val.to_owned()))
         } else if key.starts_with(MANIFEST_TOPIC) {
             Ok(ManifestTopic(val.to_owned()))
         } else if key.starts_with(ADDRESS_TRACKER) {
@@ -121,8 +121,8 @@ impl Field {
         }
     }
 
-    fn display_name(&self) -> Option<&str> {
-        if let Field::DisplayName(ref name) = self {
+    fn name(&self) -> Option<&str> {
+        if let Field::Name(ref name) = self {
             Some(name)
         } else {
             None
@@ -173,6 +173,7 @@ mod tests {
 
     #[test]
     fn smoke() {
+        // https://en.wikipedia.org/wiki/Magnet_URI_scheme
         MagnetURI::from_str("magnet:?xt=urn:ed2k:31D6CFE0D16AE931B73C59D7E0C089C0&xl=0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
         panic!();
     }
