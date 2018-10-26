@@ -32,6 +32,7 @@ impl Error {
     }
 }
 
+/// A struct holding fields stored in a Magnet URI
 #[derive(Debug, Default)]
 pub struct MagnetURI {
     fields: Vec<Field>,
@@ -52,35 +53,77 @@ impl MagnetURI {
     }
 
     pub fn names(&self) -> Vec<&str> {
-        self.get_field_value(Field::name)
+        self.iter_field_values(Field::name).collect()
     }
 
     pub fn name(&self) -> Option<&str> {
-        None // FIXME
+        self.iter_field_values(Field::name).next()
     }
 
     pub fn dn(&self) -> Option<&str> {
         self.name()
     }
 
+    pub fn length(&self) -> Option<u64> {
+        self.iter_field_values(Field::length).next()
+    }
+
     pub fn info_hashes(&self) -> Vec<&BTInfoHash> {
-        Vec::new() // FIXME
+        self.iter_field_values(Field::info_hash).collect()
     }
 
     pub fn info_hash(&self) -> Option<&BTInfoHash> {
-        None // FIXME
+        self.iter_field_values(Field::info_hash).next()
     }
 
-    fn get_field_value<'a, F, T>(&'a self, f: F) -> Vec<T>
+    fn iter_field_values<'a, F, T>(&'a self, f: F) -> impl Iterator<Item=T> + 'a
     where
-        F: Fn(&'a Field) -> Option<T>,
+        F: Fn(&'a Field) -> Option<T> + Sized + 'a,
+        T: 'a,
     {
         self.fields
             .iter()
             .map(f)
             .filter(Option::is_some)
             .map(Option::unwrap)
-            .collect()
+    }
+
+    pub fn add_field(&mut self, f: Field) -> &Self {
+        self.fields.push(f);
+        self
+    }
+
+    pub fn add_name(&mut self, name: &str) -> &Self {
+        self.add_field(Field::Name(name.to_owned()))
+    }
+
+    pub fn add_topic(&mut self, xt: Topic) -> &Self {
+        self.add_field(Field::Topic(xt))
+    }
+
+    pub fn add_extension(&mut self, ext_name: &str, val: &str) -> &Self {
+        self.add_field(Field::Extension(ext_name.to_owned(), val.to_owned()))
+    }
+
+    pub fn set_name(&mut self, name: &str) -> &Self {
+        self.set_unique_field(|f| f.name().is_none(), Field::Name(name.to_owned()))
+    }
+
+    pub fn set_info_hash(&mut self, bith: BTInfoHash) -> &Self {
+        self.set_unique_field(|f| {
+            match f {
+                Field::Topic(Topic::BitTorrentInfoHash(_)) => false,
+                _ => true,
+            }
+        }, Field::Topic(Topic::BitTorrentInfoHash(bith)))
+    }
+
+    fn set_unique_field<F>(&mut self, retain_filter: F, field: Field) -> &Self
+    where
+        F: FnMut(&Field) -> bool
+    {
+        self.fields.retain(retain_filter);
+        self.add_field(field)
     }
 }
 
@@ -114,7 +157,7 @@ impl fmt::Display for MagnetURI {
 #[derive(Debug, PartialEq)]
 pub enum Field {
     Name(String),
-    Length(usize),
+    Length(u64),
     Topic(Topic),
     AcceptableSource(String),
     ExactSource(String),
@@ -132,7 +175,7 @@ impl Field {
 
         match key {
             NAME => Ok(Name(val.to_owned())),
-            LENGTH => match usize::from_str(val) {
+            LENGTH => match u64::from_str(val) {
                 Err(_) => Err(Error::with_field(key, val)),
                 Ok(l) => Ok(Length(l)),
             },
@@ -171,6 +214,20 @@ impl Field {
             _ => None,
         }
     }
+
+    fn length(&self) -> Option<u64> {
+        match self {
+            Field::Length(len) => Some(*len),
+            _ => None,
+        }
+    }
+
+    fn info_hash(&self) -> Option<&BTInfoHash> {
+        match self {
+            Field::Topic(Topic::BitTorrentInfoHash(ref hash)) => Some(hash),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Field {
@@ -181,16 +238,30 @@ impl fmt::Display for Field {
 
 type TTHHash = String;
 type SHA1Hash = String;
+type ED2KHash = String;
+type AICHHash = String;
+type KazaaHash = String;
 type BTInfoHash = String;
+type MD5Hash = String;
 
 #[derive(Debug, PartialEq)]
 pub enum Topic {
+    /// urn:tree:tiger:TTHHash
     TigerTreeHash(TTHHash),
+    /// urn:sha1:SHA1Hash
     SHA1(SHA1Hash),
+    /// urn:bitprint:SHA1Hash.TTHHash
     BitPrint(SHA1Hash, TTHHash),
-    ED2K(String),
-    MD5(String),
+    /// urn:ed2k:ED2KHash
+    ED2K(ED2KHash),
+    /// urn:aich:AICHHash
+    AdvancedIntelligentCorruptionHandler(AICHHash),
+    /// urn:kzhash:KazaaHash
+    Kazaa(KazaaHash),
+    /// urn:bith:BTInfoHash
     BitTorrentInfoHash(BTInfoHash),
+    /// urn:md5:MD5Hash
+    MD5(MD5Hash),
 }
 
 impl FromStr for Topic {
@@ -204,40 +275,6 @@ impl FromStr for Topic {
 impl fmt::Display for Topic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "")
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Builder {
-    fields: Vec<Field>,
-}
-
-impl Builder {
-    pub fn with_field(mut self, f: Field) -> Self {
-        self.fields.push(f);
-        self
-    }
-
-    pub fn with_name(self, name: &str) -> Self {
-        self.with_field(Field::Name(name.to_owned()))
-    }
-
-    pub fn with_topic(self, xt: Topic) -> Self {
-        self.with_field(Field::Topic(xt))
-    }
-
-    pub fn with_extension(self, ext_name: &str, val: &str) -> Self {
-        self.with_field(Field::Extension(ext_name.to_owned(), val.to_owned()))
-    }
-
-    pub fn with_info_hash(self, bith: BTInfoHash) -> Self {
-        self.with_topic(Topic::BitTorrentInfoHash(bith))
-    }
-
-    pub fn build(self) -> MagnetURI {
-        MagnetURI {
-            fields: self.fields,
-        }
     }
 }
 
