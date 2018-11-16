@@ -2,10 +2,15 @@
 name = "magnet-uri"
 version = "0.1.0"
 authors = ["Jakub Jaroszewski <jakub.jaroszewski@gmail.com>"]
+description = "A library for parsing Magnet URI scheme"
 repository = "https://github.com/pierd/magnet-uri"
 keywords = ["magnet", "bittorrent"]
+categories = ["network-programming"]
 readme = "README.md"
 license = "MIT"
 
 [dependencies]
 serde_urlencoded = "0.5.3"
+
+[badges]
+travis-ci = { repository = "pierd/magnet-uri", branch = "master" }
