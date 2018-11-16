@@ -210,12 +210,14 @@ impl Field {
             KEYWORD => Ok(Keyword(val.to_owned())),
             MANIFEST => Ok(Manifest(val.to_owned())),
             ADDRESS_TRACKER => Ok(AddressTracker(val.to_owned())),
-            _ => if key.starts_with(EXTENSION_PREFIX) {
-                let (_, ext_name) = key.split_at(EXTENSION_PREFIX.len());
-                Ok(Extension(ext_name.to_owned(), val.to_owned()))
-            } else {
-                Ok(Unknown(key.to_owned(), val.to_owned()))
-            },
+            _ => {
+                if key.starts_with(EXTENSION_PREFIX) {
+                    let (_, ext_name) = key.split_at(EXTENSION_PREFIX.len());
+                    Ok(Extension(ext_name.to_owned(), val.to_owned()))
+                } else {
+                    Ok(Unknown(key.to_owned(), val.to_owned()))
+                }
+            }
         }
     }
 
