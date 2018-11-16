@@ -4,29 +4,29 @@ use serde_urlencoded::de::Error as UrlEncodeError;
 use std::fmt;
 use std::str::FromStr;
 
-const SCHEME: &'static str = "magnet:?";
+const SCHEME: &str = "magnet:?";
 
 pub(self) mod field_name {
-    pub const NAME: &'static str = "dn";
-    pub const LENGTH: &'static str = "xl";
-    pub const TOPIC: &'static str = "xt";
-    pub const ACCEPTABLE_SOURCE: &'static str = "as";
-    pub const EXACT_SOURCE: &'static str = "xs";
-    pub const KEYWORD: &'static str = "kt";
-    pub const MANIFEST: &'static str = "mt";
-    pub const ADDRESS_TRACKER: &'static str = "tr";
-    pub const EXTENSION_PREFIX: &'static str = "x.";
+    pub const NAME: &str = "dn";
+    pub const LENGTH: &str = "xl";
+    pub const TOPIC: &str = "xt";
+    pub const ACCEPTABLE_SOURCE: &str = "as";
+    pub const EXACT_SOURCE: &str = "xs";
+    pub const KEYWORD: &str = "kt";
+    pub const MANIFEST: &str = "mt";
+    pub const ADDRESS_TRACKER: &str = "tr";
+    pub const EXTENSION_PREFIX: &str = "x.";
 }
 
 pub(self) mod exact_topic_urn {
-    pub const TIGER_TREE_HASH: &'static str = "urn:tree:tiger:";
-    pub const SHA1: &'static str = "urn:sha1:";
-    pub const BIT_PRINT: &'static str = "urn:bitprint:";
-    pub const ED2K: &'static str = "urn:ed2k:";
-    pub const AICH: &'static str = "urn:aich:";
-    pub const KAZAA: &'static str = "urn:kzhash:";
-    pub const BITTORRENT_INFO_HASH: &'static str = "urn:bith:";
-    pub const MD5: &'static str = "urn:md5:";
+    pub const TIGER_TREE_HASH: &str = "urn:tree:tiger:";
+    pub const SHA1: &str = "urn:sha1:";
+    pub const BIT_PRINT: &str = "urn:bitprint:";
+    pub const ED2K: &str = "urn:ed2k:";
+    pub const AICH: &str = "urn:aich:";
+    pub const KAZAA: &str = "urn:kzhash:";
+    pub const BITTORRENT_INFO_HASH: &str = "urn:bith:";
+    pub const MD5: &str = "urn:md5:";
 }
 
 #[derive(Debug)]
@@ -329,7 +329,7 @@ impl FromStr for Topic {
         } else if let Some(hash) = match_prefix(s, exact_topic_urn::SHA1) {
             Ok(SHA1(hash.to_owned()))
         } else if let Some(hashes) = match_prefix(s, exact_topic_urn::BIT_PRINT) {
-            let mut parts = hashes.split(".");
+            let mut parts = hashes.split('.');
             if let (Some(sha_hash), Some(tth_hash), None) =
                 (parts.next(), parts.next(), parts.next())
             {
