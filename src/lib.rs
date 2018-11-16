@@ -58,9 +58,15 @@ impl MagnetURI {
         self.fields.iter().any(Field::is_unknown)
     }
 
+    pub fn has_topic_conflict(&self) -> bool {
+        self.iter_topics().any(|topic1| {
+            self.iter_topics()
+                .any(|topic2| Topic::conflicts(topic1, topic2))
+        })
+    }
+
     pub fn is_strictly_valid(&self) -> bool {
-        // TODO: no unknown fields, one length, no duplicate non matching hashes
-        true
+        !self.has_unknown_fields() && self.length() != None && !self.has_topic_conflict()
     }
 
     pub fn names(&self) -> Vec<&str> {
@@ -79,8 +85,16 @@ impl MagnetURI {
         self.iter_field_values(Field::length).next()
     }
 
+    pub fn xl(&self) -> Option<u64> {
+        self.length()
+    }
+
+    pub fn iter_topics(&self) -> impl Iterator<Item = &Topic> {
+        self.iter_field_values(Field::topic)
+    }
+
     pub fn topics(&self) -> Vec<&Topic> {
-        self.iter_field_values(Field::topic).collect()
+        self.iter_topics().collect()
     }
 
     pub fn info_hashes(&self) -> Vec<&BTInfoHash> {
@@ -269,13 +283,37 @@ pub enum Topic {
     /// urn:ed2k:ED2KHash
     ED2K(ED2KHash),
     /// urn:aich:AICHHash
-    AdvancedIntelligentCorruptionHandler(AICHHash),
+    AICH(AICHHash),
     /// urn:kzhash:KazaaHash
     Kazaa(KazaaHash),
     /// urn:bith:BTInfoHash
     BitTorrentInfoHash(BTInfoHash),
     /// urn:md5:MD5Hash
     MD5(MD5Hash),
+}
+
+impl Topic {
+    fn conflicts(&self, other: &Topic) -> bool {
+        use Topic::*;
+
+        match (self, other) {
+            (TigerTreeHash(h1), TigerTreeHash(h2)) => h1 != h2,
+            (SHA1(h1), SHA1(h2)) => h1 != h2,
+            (BitPrint(sha1, tth1), BitPrint(sha2, tth2)) => sha1 != sha2 || tth1 != tth2,
+            (ED2K(h1), ED2K(h2)) => h1 != h2,
+            (AICH(h1), AICH(h2)) => h1 != h2,
+            (Kazaa(h1), Kazaa(h2)) => h1 != h2,
+            (BitTorrentInfoHash(h1), BitTorrentInfoHash(h2)) => h1 != h2,
+            (MD5(h1), MD5(h2)) => h1 != h2,
+
+            (TigerTreeHash(tth1), BitPrint(_, tth2)) => tth1 != tth2,
+            (BitPrint(_, tth1), TigerTreeHash(tth2)) => tth1 != tth2,
+            (SHA1(sha1), BitPrint(sha2, _)) => sha1 != sha2,
+            (BitPrint(sha1, _), SHA1(sha2)) => sha1 != sha2,
+
+            _ => false,
+        }
+    }
 }
 
 impl FromStr for Topic {
@@ -300,7 +338,7 @@ impl FromStr for Topic {
         } else if let Some(hash) = match_prefix(s, exact_topic_urn::ED2K) {
             Ok(ED2K(hash.to_owned()))
         } else if let Some(hash) = match_prefix(s, exact_topic_urn::AICH) {
-            Ok(AdvancedIntelligentCorruptionHandler(hash.to_owned()))
+            Ok(AICH(hash.to_owned()))
         } else if let Some(hash) = match_prefix(s, exact_topic_urn::KAZAA) {
             Ok(Kazaa(hash.to_owned()))
         } else if let Some(hash) = match_prefix(s, exact_topic_urn::BITTORRENT_INFO_HASH) {
@@ -323,9 +361,7 @@ impl fmt::Display for Topic {
                 write!(f, "{}{}.{}", exact_topic_urn::BIT_PRINT, hash1, hash2)
             }
             ED2K(hash) => write!(f, "{}{}", exact_topic_urn::ED2K, hash),
-            AdvancedIntelligentCorruptionHandler(hash) => {
-                write!(f, "{}{}", exact_topic_urn::AICH, hash)
-            }
+            AICH(hash) => write!(f, "{}{}", exact_topic_urn::AICH, hash),
             Kazaa(hash) => write!(f, "{}{}", exact_topic_urn::KAZAA, hash),
             BitTorrentInfoHash(hash) => {
                 write!(f, "{}{}", exact_topic_urn::BITTORRENT_INFO_HASH, hash)
@@ -359,6 +395,7 @@ mod tests {
     #[test]
     fn test_zero_file_parsing() {
         let uri = MagnetURI::from_str("magnet:?xt=urn:ed2k:31D6CFE0D16AE931B73C59D7E0C089C0&xl=0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
+        assert!(uri.is_strictly_valid());
         assert_eq!(uri.length(), Some(0));
         assert_eq!(
             uri.topics(),
@@ -371,5 +408,18 @@ mod tests {
                 &Topic::MD5("D41D8CD98F00B204E9800998ECF8427E".to_owned()),
             ]
         );
+    }
+
+    #[test]
+    fn test_invalid_non_matching_hashes() {
+        let uri = MagnetURI::from_str("magnet:?xt=urn:md5:31D6CFE0D16AE931B73C59D7E0C089C0&xl=0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
+        assert!(!uri.is_strictly_valid());
+    }
+
+    #[test]
+    fn test_invalid_no_length() {
+        let uri = MagnetURI::from_str("magnet:?xt=urn:ed2k:31D6CFE0D16AE931B73C59D7E0C089C0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
+        assert!(!uri.is_strictly_valid());
+        assert_eq!(uri.length(), None);
     }
 }
