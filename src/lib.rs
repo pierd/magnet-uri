@@ -18,6 +18,17 @@ pub(self) mod field_name {
     pub const EXTENSION_PREFIX: &'static str = "x.";
 }
 
+pub(self) mod exact_topic_urn {
+    pub const TIGER_TREE_HASH: &'static str = "urn:tree:tiger:";
+    pub const SHA1: &'static str = "urn:sha1:";
+    pub const BIT_PRINT: &'static str = "urn:bitprint:";
+    pub const ED2K: &'static str = "urn:ed2k:";
+    pub const AICH: &'static str = "urn:aich:";
+    pub const KAZAA: &'static str = "urn:kzhash:";
+    pub const BITTORRENT_INFO_HASH: &'static str = "urn:bith:";
+    pub const MD5: &'static str = "urn:md5:";
+}
+
 #[derive(Debug)]
 pub enum Error {
     Scheme,
@@ -68,6 +79,10 @@ impl MagnetURI {
         self.iter_field_values(Field::length).next()
     }
 
+    pub fn topics(&self) -> Vec<&Topic> {
+        self.iter_field_values(Field::topic).collect()
+    }
+
     pub fn info_hashes(&self) -> Vec<&BTInfoHash> {
         self.iter_field_values(Field::info_hash).collect()
     }
@@ -76,7 +91,7 @@ impl MagnetURI {
         self.iter_field_values(Field::info_hash).next()
     }
 
-    fn iter_field_values<'a, F, T>(&'a self, f: F) -> impl Iterator<Item=T> + 'a
+    fn iter_field_values<'a, F, T>(&'a self, f: F) -> impl Iterator<Item = T> + 'a
     where
         F: Fn(&'a Field) -> Option<T> + Sized + 'a,
         T: 'a,
@@ -110,17 +125,18 @@ impl MagnetURI {
     }
 
     pub fn set_info_hash(&mut self, bith: BTInfoHash) -> &Self {
-        self.set_unique_field(|f| {
-            match f {
+        self.set_unique_field(
+            |f| match f {
                 Field::Topic(Topic::BitTorrentInfoHash(_)) => false,
                 _ => true,
-            }
-        }, Field::Topic(Topic::BitTorrentInfoHash(bith)))
+            },
+            Field::Topic(Topic::BitTorrentInfoHash(bith)),
+        )
     }
 
     fn set_unique_field<F>(&mut self, retain_filter: F, field: Field) -> &Self
     where
-        F: FnMut(&Field) -> bool
+        F: FnMut(&Field) -> bool,
     {
         self.fields.retain(retain_filter);
         self.add_field(field)
@@ -148,12 +164,7 @@ impl FromStr for MagnetURI {
     }
 }
 
-impl fmt::Display for MagnetURI {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", SCHEME)
-    }
-}
-
+/// Field of a Magnet URI
 #[derive(Debug, PartialEq)]
 pub enum Field {
     Name(String),
@@ -222,6 +233,13 @@ impl Field {
         }
     }
 
+    fn topic(&self) -> Option<&Topic> {
+        match self {
+            Field::Topic(topic) => Some(topic),
+            _ => None,
+        }
+    }
+
     fn info_hash(&self) -> Option<&BTInfoHash> {
         match self {
             Field::Topic(Topic::BitTorrentInfoHash(ref hash)) => Some(hash),
@@ -230,12 +248,7 @@ impl Field {
     }
 }
 
-impl fmt::Display for Field {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
-    }
-}
-
+// TODO: use more specific types
 type TTHHash = String;
 type SHA1Hash = String;
 type ED2KHash = String;
@@ -244,6 +257,7 @@ type KazaaHash = String;
 type BTInfoHash = String;
 type MD5Hash = String;
 
+/// Topic (hash) of a Magnet URI
 #[derive(Debug, PartialEq)]
 pub enum Topic {
     /// urn:tree:tiger:TTHHash
@@ -268,13 +282,65 @@ impl FromStr for Topic {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Err(Error::ExactTopic(s.to_owned()))
+        use Topic::*;
+
+        if let Some(hash) = match_prefix(s, exact_topic_urn::TIGER_TREE_HASH) {
+            Ok(TigerTreeHash(hash.to_owned()))
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::SHA1) {
+            Ok(SHA1(hash.to_owned()))
+        } else if let Some(hashes) = match_prefix(s, exact_topic_urn::BIT_PRINT) {
+            let mut parts = hashes.split(".");
+            if let (Some(sha_hash), Some(tth_hash), None) =
+                (parts.next(), parts.next(), parts.next())
+            {
+                Ok(BitPrint(sha_hash.to_owned(), tth_hash.to_owned()))
+            } else {
+                Err(Error::ExactTopic(s.to_owned()))
+            }
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::ED2K) {
+            Ok(ED2K(hash.to_owned()))
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::AICH) {
+            Ok(AdvancedIntelligentCorruptionHandler(hash.to_owned()))
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::KAZAA) {
+            Ok(Kazaa(hash.to_owned()))
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::BITTORRENT_INFO_HASH) {
+            Ok(BitTorrentInfoHash(hash.to_owned()))
+        } else if let Some(hash) = match_prefix(s, exact_topic_urn::MD5) {
+            Ok(MD5(hash.to_owned()))
+        } else {
+            Err(Error::ExactTopic(s.to_owned()))
+        }
     }
 }
 
 impl fmt::Display for Topic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
+        use Topic::*;
+        match self {
+            TigerTreeHash(hash) => write!(f, "{}{}", exact_topic_urn::TIGER_TREE_HASH, hash),
+            SHA1(hash) => write!(f, "{}{}", exact_topic_urn::SHA1, hash),
+            BitPrint(hash1, hash2) => {
+                write!(f, "{}{}.{}", exact_topic_urn::BIT_PRINT, hash1, hash2)
+            }
+            ED2K(hash) => write!(f, "{}{}", exact_topic_urn::ED2K, hash),
+            AdvancedIntelligentCorruptionHandler(hash) => {
+                write!(f, "{}{}", exact_topic_urn::AICH, hash)
+            }
+            Kazaa(hash) => write!(f, "{}{}", exact_topic_urn::KAZAA, hash),
+            BitTorrentInfoHash(hash) => {
+                write!(f, "{}{}", exact_topic_urn::BITTORRENT_INFO_HASH, hash)
+            }
+            MD5(hash) => write!(f, "{}{}", exact_topic_urn::MD5, hash),
+        }
+    }
+}
+
+fn match_prefix<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    if s.starts_with(prefix) {
+        let (_, postfix) = s.split_at(prefix.len());
+        Some(postfix)
+    } else {
+        None
     }
 }
 
@@ -283,9 +349,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn smoke() {
-        // https://en.wikipedia.org/wiki/Magnet_URI_scheme
-        MagnetURI::from_str("magnet:?xt=urn:ed2k:31D6CFE0D16AE931B73C59D7E0C089C0&xl=0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
-        panic!();
+    fn test_match_prefix() {
+        assert_eq!(match_prefix("foobar", "foobar"), Some(""));
+        assert_eq!(match_prefix("foobar", "foo"), Some("bar"));
+        assert_eq!(match_prefix("foobar", "foob"), Some("ar"));
+        assert_eq!(match_prefix("foobar", "baz"), None);
+    }
+
+    #[test]
+    fn test_zero_file_parsing() {
+        let uri = MagnetURI::from_str("magnet:?xt=urn:ed2k:31D6CFE0D16AE931B73C59D7E0C089C0&xl=0&dn=zero_len.fil&xt=urn:bitprint:3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ.LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ&xt=urn:md5:D41D8CD98F00B204E9800998ECF8427E").unwrap();
+        assert_eq!(uri.length(), Some(0));
+        assert_eq!(
+            uri.topics(),
+            vec![
+                &Topic::ED2K("31D6CFE0D16AE931B73C59D7E0C089C0".to_owned()),
+                &Topic::BitPrint(
+                    "3I42H3S6NNFQ2MSVX7XZKYAYSCX5QBYJ".to_owned(),
+                    "LWPNACQDBZRYXW3VHJVCJ64QBZNGHOHHHZWCLNQ".to_owned()
+                ),
+                &Topic::MD5("D41D8CD98F00B204E9800998ECF8427E".to_owned()),
+            ]
+        );
     }
 }
