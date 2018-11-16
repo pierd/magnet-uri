@@ -1,0 +1,7 @@
+[package]
+name = "magnet-uri"
+version = "0.1.0"
+authors = ["Jakub Jaroszewski <jakub.jaroszewski@gmail.com>"]
+
+[dependencies]
+serde_urlencoded = "0.5.3"
