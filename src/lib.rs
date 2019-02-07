@@ -25,7 +25,7 @@ pub(self) mod exact_topic_urn {
     pub const ED2K: &str = "urn:ed2k:";
     pub const AICH: &str = "urn:aich:";
     pub const KAZAA: &str = "urn:kzhash:";
-    pub const BITTORRENT_INFO_HASH: &str = "urn:bith:";
+    pub const BITTORRENT_INFO_HASH: &str = "urn:btih:";
     pub const MD5: &str = "urn:md5:";
 }
 
@@ -138,13 +138,13 @@ impl MagnetURI {
         self.set_unique_field(|f| f.name().is_none(), Field::Name(name.to_owned()))
     }
 
-    pub fn set_info_hash(&mut self, bith: BTInfoHash) -> &Self {
+    pub fn set_info_hash(&mut self, btih: BTInfoHash) -> &Self {
         self.set_unique_field(
             |f| match f {
                 Field::Topic(Topic::BitTorrentInfoHash(_)) => false,
                 _ => true,
             },
-            Field::Topic(Topic::BitTorrentInfoHash(bith)),
+            Field::Topic(Topic::BitTorrentInfoHash(btih)),
         )
     }
 
@@ -288,7 +288,7 @@ pub enum Topic {
     AICH(AICHHash),
     /// urn:kzhash:KazaaHash
     Kazaa(KazaaHash),
-    /// urn:bith:BTInfoHash
+    /// urn:btih:BTInfoHash
     BitTorrentInfoHash(BTInfoHash),
     /// urn:md5:MD5Hash
     MD5(MD5Hash),
