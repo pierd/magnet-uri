@@ -1,6 +1,6 @@
 [package]
 name = "magnet-uri"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jakub Jaroszewski <jakub.jaroszewski@gmail.com>"]
 description = "A library for parsing Magnet URI scheme"
 repository = "https://github.com/pierd/magnet-uri"
