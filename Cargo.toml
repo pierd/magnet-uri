@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 
 [dependencies]
-serde_urlencoded = "0.5.3"
+serde_urlencoded = "0.7"
 
 [badges]
 travis-ci = { repository = "pierd/magnet-uri", branch = "master" }
